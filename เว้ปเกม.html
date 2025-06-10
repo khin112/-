@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+  <meta charset="UTF-8">
+  <title>เข้าสู่ระบบ - เกมสะสมแต้ม</title>
+  <style>
+    body {
+      font-family: 'Prompt', sans-serif;
+      background: linear-gradient(to right, #c2e9fb, #f9f9f9);
+      text-align: center;
+      padding: 40px;
+      color: #333;
+    }
+    .card {
+      background-color: white;
+      border-radius: 20px;
+      padding: 30px;
+      max-width: 500px;
+      margin: auto;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+    }
+    input, select {
+      padding: 10px;
+      width: 80%;
+      border-radius: 10px;
+      margin: 10px 0;
+      border: 1px solid #ccc;
+      font-size: 16px;
+    }
+    .btn {
+      padding: 10px 25px;
+      font-size: 16px;
+      background-color: #4CAF50;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      cursor: pointer;
+      margin-top: 15px;
+      transition: background 0.2s;
+    }
+    .btn:hover {
+      background-color: #388e3c;
+    }
+    .btn-logout {
+      background-color: #F44336;
+    }
+    .btn-logout:hover {
+      background-color: #b71c1c;
+    }
+    .hidden { display: none; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 20px;
+    }
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #ddd;
+    }
+    th {
+      background-color: #f0f0f0;
+    }
+    .error { color: #e53935; margin-bottom: 10px; }
+    .success { color: #388e3c; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+
+  <!-- Login Form -->
+  <div class="card" id="loginScreen">
+    <h2>🌍 เข้าสู่ระบบ</h2>
+    <div id="loginMsg" class="error"></div>
+    <input type="email" id="email" placeholder="อีเมล"><br>
+    <input type="text" id="name" placeholder="ชื่อเล่น"><br>
+    <input type="number" id="age" placeholder="อายุ" min="1"><br>
+    <select id="gender">
+      <option value="ชาย">ผู้ชาย</option>
+      <option value="หญิง">ผู้หญิง</option>
+      <option value="อื่นๆ">อื่น ๆ</option>
+    </select><br>
+    <input type="password" id="password" placeholder="รหัสผ่าน"><br>
+    <button class="btn" onclick="login()">เข้าสู่ระบบ/สมัครสมาชิก</button>
+  </div>
+
+  <!-- Game Screen -->
+  <div class="card hidden" id="gameScreen">
+    <h2>ยินดีต้อนรับ <span id="playerName"></span> 👋</h2>
+    <p>แต้มของคุณ: <span id="playerScore">0</span> | เลเวล: <span id="playerLevel">1</span></p>
+    <button class="btn" onclick="earnPoint()">📤 ทิ้งขยะ (รับแต้ม)</button>
+    <button class="btn btn-logout" onclick="logout()">ออกจากระบบ</button>
+
+    <h3>🏆 อันดับผู้เล่น</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>ชื่อ</th>
+          <th>เพศ</th>
+          <th>อายุ</th>
+          <th>แต้ม</th>
+        </tr>
+      </thead>
+      <tbody id="rankingTable"></tbody>
+    </table>
+  </div>
+
+  <script>
+    let currentUser = null;
+
+    function getUsers() {
+      return JSON.parse(localStorage.getItem("users") || "[]");
+    }
+
+    function saveUsers(users) {
+      localStorage.setItem("users", JSON.stringify(users));
+    }
+
+    function showMsg(id, message, type="error") {
+      const msgDiv = document.getElementById(id);
+      msgDiv.textContent = message || "";
+      msgDiv.className = type;
+    }
+
+    function login() {
+      const email = document.getElementById("email").value.trim().toLowerCase();
+      const name = document.getElementById("name").value.trim();
+      const age = document.getElementById("age").value.trim();
+      const gender = document.getElementById("gender").value;
+      const password = document.getElementById("password").value;
+
+      if (!email || !name || !age || !password) {
+        showMsg("loginMsg", "กรุณากรอกข้อมูลให้ครบ");
+        return;
+      }
+
+      if (!validateEmail(email)) {
+        showMsg("loginMsg", "รูปแบบอีเมลไม่ถูกต้อง");
+        return;
+      }
+
+      if (parseInt(age) <= 0) {
+        showMsg("loginMsg", "กรุณาระบุอายุให้ถูกต้อง");
+        return;
+      }
+
+      let users = getUsers();
+      let userIndex = users.findIndex(u => u.email.toLowerCase() === email);
+      let user;
+
+      if (userIndex > -1) {
+        // Login
+        user = users[userIndex];
+        if (user.password !== password) {
+          showMsg("loginMsg", "รหัสผ่านไม่ถูกต้อง");
+          return;
+        }
+      } else {
+        // Register (prevent duplicate name)
+        if (users.some(u => u.name === name)) {
+          showMsg("loginMsg", "ชื่อเล่นนี้ถูกใช้แล้ว");
+          return;
+        }
+        user = { email, name, age, gender, password, score: 0 };
+        users.push(user);
+        saveUsers(users);
+      }
+
+      currentUser = user;
+      showMsg("loginMsg", "");
+      showGameScreen();
+      updateUI();
+      updateRanking();
+    }
+
+    function logout() {
+      currentUser = null;
+      document.getElementById("gameScreen").classList.add("hidden");
+      document.getElementById("loginScreen").classList.remove("hidden");
+      showMsg("loginMsg", "");
+      clearLoginForm();
+    }
+
+    function clearLoginForm() {
+      document.getElementById("email").value = "";
+      document.getElementById("name").value = "";
+      document.getElementById("age").value = "";
+      document.getElementById("password").value = "";
+    }
+
+    function showGameScreen() {
+      document.getElementById("loginScreen").classList.add("hidden");
+      document.getElementById("gameScreen").classList.remove("hidden");
+    }
+
+    function earnPoint() {
+      if (!currentUser) return;
+      currentUser.score += 1;
+      let users = getUsers();
+      let idx = users.findIndex(u => u.email === currentUser.email);
+      if (idx > -1) {
+        users[idx] = currentUser;
+        saveUsers(users);
+      }
+      updateUI();
+      updateRanking();
+    }
+
+    function updateUI() {
+      if (!currentUser) return;
+      document.getElementById("playerName").innerText = currentUser.name;
+      document.getElementById("playerScore").innerText = currentUser.score;
+      document.getElementById("playerLevel").innerText = Math.floor(currentUser.score / 5) + 1;
+    }
+
+    function updateRanking() {
+      let users = getUsers();
+      users.sort((a, b) => b.score - a.score || a.name.localeCompare(b.name));
+      const table = document.getElementById("rankingTable");
+      table.innerHTML = "";
+      users.forEach(u => {
+        const row = `<tr>
+          <td>${escapeHtml(u.name)}</td>
+          <td>${escapeHtml(u.gender)}</td>
+          <td>${escapeHtml(u.age)}</td>
+          <td>${escapeHtml(u.score)}</td>
+        </tr>`;
+        table.innerHTML += row;
+      });
+    }
+
+    function validateEmail(email) {
+      // Simple email pattern
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+
+    function escapeHtml(text) {
+      // Prevent HTML injection in table
+      return (text + "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+    }
+
+    // Auto login if already logged in (optional, can remove)
+    // window.onload = function() {
+    //   // Example: restore session
+    // };
+  </script>
+</body>
+</html>
